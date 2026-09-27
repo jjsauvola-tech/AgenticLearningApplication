@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+data/
+*.sqlite*
+*.ala.zip
+*.spec
+runtime.json
+

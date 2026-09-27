@@ -1,0 +1,41 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            architecture: x64
+          - runner: windows-11-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller==6.22.3
+      - name: Core and HTTP tests
+        run: python -m unittest discover -s tests -v
+      - name: Build standalone application
+        shell: pwsh
+        run: ./build_windows.ps1 -Python python
+      - name: Test packaged executable
+        run: python tools/smoke_packaged.py dist/ALA/ALA.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ALA-Windows-${{ matrix.architecture }}
+          path: dist/ALA/
+          if-no-files-found: error
+
