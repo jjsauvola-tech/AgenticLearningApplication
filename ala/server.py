@@ -6,6 +6,7 @@ import secrets
 import threading
 import uuid
 import urllib.request
+import urllib.error
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -66,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             url=urlparse(self.path)
             path=url.path
-            if not mutation and path in ('/','/app.js','/goals.js','/style.css'):
+            if not mutation and path in ('/','/app.js','/goals.js','/imports.js','/style.css'):
                 filename='index.html' if path=='/' else path[1:]
                 mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'}[Path(filename).suffix]
                 return self.send((self.server.web/filename).read_bytes(),mime=mime+'; charset=utf-8')
@@ -158,16 +159,18 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,KeyError,ImportProblem) as e:
             return self.send({'error':str(e).strip("'")[:180]},400)
         except Exception as e:
-            import urllib.error
             if isinstance(e,(urllib.error.URLError,TimeoutError,ConnectionError)):
                 return self.send({'error':'model_unavailable'},503)
             # Never include paths, source content or credentials in error messages.
             return self.send({'error':'operation_failed','type':type(e).__name__},500)
 
-    def save_message(self, vid,did,page,role,text):
+    def save_message(self, vid,did,page,role,text,sources=None):
         self.server.store.anchor(vid,did,page)
         with self.server.store.db(vid) as db:
-            db.execute('INSERT INTO messages VALUES(?,?,?,?,?,?)',(uuid.uuid4().hex,did,page,role,text,now()))
+            mid=uuid.uuid4().hex
+            db.execute('INSERT INTO messages VALUES(?,?,?,?,?,?)',(mid,did,page,role,text,now()))
+            if sources:
+                db.execute('INSERT INTO message_sources VALUES(?,?)',(mid,json.dumps(sources)))
 
     def chat(self,vid,body):
         store=self.server.store
@@ -175,6 +178,9 @@ class Handler(BaseHTTPRequestHandler):
         if not settings['model']: return self.send({'error':'model_not_configured'},400)
         did=body.get('document_id')
         page=body.get('page')
+        task=body.get('task','chat')
+        if task not in ('chat','question','feedback'): raise ValueError('invalid_task')
+        if task=='question' and not did: raise ValueError('source_required')
         prompt=str(body.get('text','')).strip()[:8000]
         if not prompt: raise ValueError('empty_message')
         context=[]
@@ -183,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
             doc=store.document(vid,did)
             p=doc['pages'][page-1]
             context.append({'name':doc['name'],'document_id':did,'page':page,'text':p['text'][:14000]})
-        for h in store.search(vid,prompt,did)[:3]:
+        for h in (store.search(vid,prompt,did)[:3] if task=='chat' else []):
             if not any(c['document_id']==h['document_id'] and c['page']==h['page'] for c in context):
                 d=store.document(vid,h['document_id'])
                 context.append({'name':h['name'],'document_id':h['document_id'],'page':h['page'],'text':d['pages'][h['page']-1]['text'][:5000]})
@@ -195,13 +201,19 @@ class Handler(BaseHTTPRequestHandler):
                 'If asked for assessment, provide formative feedback with reasons and a relevant source, not an official grade.')
         sources='\n\n'.join('['+str(i)+'] '+c['name']+' / '+str(c['page'])+'\n'+c['text'] for i,c in enumerate(context,1))
         history=[m for m in reversed(store.rows(vid,'messages')) if m['document_id']==did and m['page']==page and m['role'] in ('user','assistant')][-8:]
+        # Practice questions and their feedback use the same selected source.
+        # Unrelated chat history or query-dependent retrieval must not change it.
+        if task!='chat': history=[]
         messages=[{'role':'system','content':system+'\n\nSOURCE MATERIAL\n'+sources}]
         messages.extend({'role':m['role'],'content':m['body'][:6000]} for m in history)
         messages.append({'role':'user','content':prompt})
         self.save_message(vid,did,page,'user',prompt)
-        payload=json.dumps({'model':settings['model'],'messages':messages,'stream':False,'options':{'num_predict':1500}}).encode()
+        payload=json.dumps({'model':settings['model'],'messages':messages,'stream':False,'think':False,'options':{'num_predict':1500}}).encode()
         req=urllib.request.Request(settings['ollamaUrl']+'/api/chat',data=payload,headers={'Content-Type':'application/json'})
         with urllib.request.urlopen(req,timeout=120) as resp:
             answer=json.loads(resp.read(2*1024*1024))['message']['content']
-        self.save_message(vid,did,page,'assistant',answer)
-        return self.send({'answer':answer,'sources':[{k:v for k,v in c.items() if k!='text'} for c in context]})
+        if not isinstance(answer,str) or not answer.strip():
+            return self.send({'error':'model_empty_response'},502)
+        sources=[{k:v for k,v in c.items() if k!='text'} for c in context]
+        self.save_message(vid,did,page,'assistant',answer,sources)
+        return self.send({'answer':answer,'sources':sources})

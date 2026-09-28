@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS goal_dependencies(
 PRAGMA user_version=2;
 '''
 
+MESSAGE_SOURCE_SCHEMA = '''
+CREATE TABLE IF NOT EXISTS message_sources(
+ message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+ sources TEXT NOT NULL);
+'''
+
 def migrate_goals(path):
     with closing(sqlite3.connect(path)) as db:
         version = db.execute('PRAGMA user_version').fetchone()[0]
@@ -51,6 +57,8 @@ def migrate_goals(path):
             raise ValueError('unsupported_database')
         if version == 1:
             db.executescript('BEGIN IMMEDIATE;\n' + GOAL_SCHEMA + '\nCOMMIT;')
+        # Additive metadata: older schema-2 backups simply have no source links.
+        db.executescript(MESSAGE_SOURCE_SCHEMA)
 
 class Store:
     def __init__(self, root):
@@ -99,7 +107,7 @@ class Store:
             path = self.root/'vaults'/vid
             (path/'originals').mkdir(parents=True)
             con = sqlite3.connect(path/'learning.sqlite')
-            con.executescript(SCHEMA + GOAL_SCHEMA)
+            con.executescript(SCHEMA + GOAL_SCHEMA + MESSAGE_SOURCE_SCHEMA)
             con.close()
             self.config['vaults'].append({'id':vid,'name':name,'created':now()})
             self.config['active'] = vid
@@ -201,6 +209,9 @@ class Store:
     def rows(self, vid, table):
         if table not in ('notes','messages','cards','attempts'): raise ValueError('invalid_table')
         with self.db(vid) as db:
+            if table == 'messages':
+                return [{**dict(r),'sources':json.loads(r['sources'] or '[]')} for r in db.execute(
+                    'SELECT m.*, s.sources FROM messages m LEFT JOIN message_sources s ON m.id=s.message_id ORDER BY m.rowid DESC')]
             return [dict(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY rowid DESC')]
 
     def goals(self, vid):
@@ -288,6 +299,7 @@ class Store:
         return sorted(hits,key=lambda h:-h['score'])[:30]
 
     def export(self, vid):
+        vid = vid or self.config['active']
         path = self.vault_path(vid)
         with tempfile.TemporaryDirectory(dir=self.root) as tmp:
             dbfile = Path(tmp)/'learning.sqlite'

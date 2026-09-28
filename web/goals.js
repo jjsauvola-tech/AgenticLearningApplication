@@ -1,5 +1,6 @@
 'use strict';
 Object.assign(words.fi, {
+  model_empty_response:'Malli ei palauttanut vastausta. Kokeile uudelleen tai valitse toinen paikallinen malli.',
   goals:'Oppimistavoitteet', newGoal:'Uusi tavoite', editGoal:'Muokkaa tavoitetta',
   goalIntro:'Määritä mitä haluat oppia ja valitse tarvittavat esitiedot. Tavoitteet näkyvät esitietojärjestyksessä koko varastosta. Opiskelumerkintä on oma arviosi, ei osaamisen todistus.',
   noGoals:'Ei vielä tavoitteita. Voit aloittaa myös ilman aineistoa.',
@@ -14,6 +15,7 @@ Object.assign(words.fi, {
   goal_missing_prerequisite:'Esitietotavoitetta ei löydy tästä varastosta.', invalid_goal:'Tarkista tavoitteen tiedot.'
 });
 Object.assign(words.en, {
+  model_empty_response:'The model returned no answer. Try again or select another local model.',
   goals:'Learning goals', newGoal:'New goal', editGoal:'Edit goal',
   goalIntro:'Define what you want to learn and select its prerequisites. Goals from the whole vault appear in prerequisite order. Study status is your self-assessment, not proof of competence.',
   noGoals:'No goals yet. You can start without importing materials.',
