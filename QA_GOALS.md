@@ -34,3 +34,7 @@ it does not certify competence or prevent reading material out of order.
 
 Database schema is now 2. Schema 1 vaults migrate automatically and schema 1
 backups are accepted. Exported schema 2 backups require the updated application.
+
+## Windows launcher correction
+
+Added Start-ALA.cmd and scripts/start.ps1 after direct file opening produced a blank page. Verified the launcher with an isolated data directory and then launched the normal local application. Its authenticated state endpoint responded, and the Study interface was observed in the browser. All 21 tests passed again. Direct HTML opening now displays startup instructions. No EXE packaging is claimed.

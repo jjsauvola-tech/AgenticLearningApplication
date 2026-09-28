@@ -10,6 +10,18 @@ a new packaged executable has not yet been verified.
 
 ## Learning goals
 
+### Starting the source checkout on this Windows PC
+
+Double-click **Start-ALA.cmd** in the project folder. It starts the local service
+in the background and opens the application window. Do not open `web/index.html`
+directly: the application needs its local Python service. The launcher uses the
+project `.venv`, the bundled runtime available on this development PC, or an
+installed Python with the required dependencies. Study data is stored in
+`%LOCALAPPDATA%\ALA`. For other computers, use the packaged executable or install
+the development requirements below. Exit through Settings → Exit application.
+
+### Editing goals
+
 Open **Learning goals / Oppimistavoitteet** in the workspace toolbar. Create a
 goal, describe what you want to learn, select prerequisite goals and optionally
 link the goal to the material section currently open in Study. Edit a goal to
