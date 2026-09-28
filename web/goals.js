@@ -1,5 +1,8 @@
 'use strict';
 Object.assign(words.fi, {
+  source_required:'Valitse ensin aineistokohta harjoittelua varten.',
+  source_insufficient:'Valitussa aineistokohdassa ei ole riittävästi tekstiä tähän harjoitukseen. Valitse toinen kohta.',
+  model_invalid_practice:'Mallin harjoitusvastauksen muotoa tai lähdelainausta ei voitu varmistaa. Vastausta ei näytetä. Kokeile toista aineistokohtaa tai mallia.',
   model_empty_response:'Malli ei palauttanut vastausta. Kokeile uudelleen tai valitse toinen paikallinen malli.',
   goals:'Oppimistavoitteet', newGoal:'Uusi tavoite', editGoal:'Muokkaa tavoitetta',
   goalIntro:'Määritä mitä haluat oppia ja valitse tarvittavat esitiedot. Tavoitteet näkyvät esitietojärjestyksessä koko varastosta. Opiskelumerkintä on oma arviosi, ei osaamisen todistus.',
@@ -15,6 +18,9 @@ Object.assign(words.fi, {
   goal_missing_prerequisite:'Esitietotavoitetta ei löydy tästä varastosta.', invalid_goal:'Tarkista tavoitteen tiedot.'
 });
 Object.assign(words.en, {
+  source_required:'Select a material section for this practice first.',
+  source_insufficient:'The selected source does not contain enough text for this practice. Select another section.',
+  model_invalid_practice:'The practice response format or source quotation could not be verified. The response was not displayed. Try another section or model.',
   model_empty_response:'The model returned no answer. Try again or select another local model.',
   goals:'Learning goals', newGoal:'New goal', editGoal:'Edit goal',
   goalIntro:'Define what you want to learn and select its prerequisites. Goals from the whole vault appear in prerequisite order. Study status is your self-assessment, not proof of competence.',

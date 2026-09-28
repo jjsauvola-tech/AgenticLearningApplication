@@ -10,6 +10,11 @@ See `QA_COURSE_WORKFLOW.md` for the ordered real-course verification and remaini
 AI-quality and browser-download findings. This version has been tested from source on Windows;
 a new packaged executable has not yet been verified.
 
+Practice questions and feedback now require a validated structured model response
+and a quotation found in the selected source. Questions display only the question;
+feedback includes the quotation for checking. Invalid replies are retried once and
+then rejected. See `QA_TUTOR.md` for the follow-up model checks and their limits.
+
 ## Importing a course folder
 
 Choose **Import materials → Choose a folder (including subfolders)**, select the

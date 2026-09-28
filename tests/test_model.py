@@ -54,12 +54,56 @@ class ModelTests(unittest.TestCase):
         store=self.server.store;vid=store.config['active']
         did=store.add_document(vid,'source.docx',core.docx_bytes(),'Test')['id']
         for task in ('chat','question','feedback'):
-            with self.request('/api/chat',{'text':'Explain photosynthesis','document_id':did,'page':1,'task':task}) as response:
+            with self.request('/api/chat',{'text':'Explain photosynthesis','document_id':did,'page':2,'task':task}) as response:
                 answer=json.load(response)
             if task!='chat':
                 self.assertEqual(1,len(answer['sources']))
-                self.assertEqual(1,answer['sources'][0]['page'])
+                self.assertEqual(2,answer['sources'][0]['page'])
                 self.assertEqual(['system','user'],[m['role'] for m in Fixture.requests[-1]['messages']])
+
+    def test_invalid_question_retried_then_rejected_without_saving_answer(self):
+        from unittest.mock import patch
+        store=self.server.store;vid=store.config['active']
+        did=store.add_document(vid,'source.docx',core.docx_bytes(),'Test')['id']
+        original=Fixture.reply
+        before=len(Fixture.requests)
+        def invalid(handler,value):
+            return original(handler,{'message':{'content':'Question? Answer: leaked.'}})
+        with patch.object(Fixture,'reply',invalid):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request('/api/chat',{'text':'Ask a question','document_id':did,'page':2,'task':'question'})
+            self.assertEqual(502,error.exception.code)
+            self.assertEqual('model_invalid_practice',json.load(error.exception)['error'])
+        self.assertEqual(2,len(Fixture.requests)-before)
+        self.assertFalse(any(r['role']=='assistant' for r in store.rows(vid,'messages')))
+
+    def test_heading_only_source_rejected_before_model_request(self):
+        store=self.server.store;vid=store.config['active']
+        did=store.add_document(vid,'source.docx',core.docx_bytes(),'Test')['id']
+        before=len(Fixture.requests)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request('/api/chat',{'text':'Ask a question','document_id':did,'page':1,'task':'question'})
+        self.assertEqual('source_insufficient',json.load(error.exception)['error'])
+        self.assertEqual(before,len(Fixture.requests))
+
+    def test_invalid_question_can_be_repaired_once(self):
+        from unittest.mock import patch
+        store=self.server.store;vid=store.config['active']
+        did=store.add_document(vid,'source.docx',core.docx_bytes(),'Test')['id']
+        original=Fixture.reply
+        calls=[]
+        def first_invalid(handler,value):
+            calls.append(value)
+            if len(calls)==1:
+                value={'message':{'content':'Question? Answer: do not show this.'}}
+            return original(handler,value)
+        with patch.object(Fixture,'reply',first_invalid):
+            with self.request('/api/chat',{'text':'Ask a question','document_id':did,'page':2,'task':'question'}) as response:
+                answer=json.load(response)['answer']
+        self.assertEqual('What does the selected source explain?',answer)
+        self.assertEqual(2,len(calls))
+        assistants=[r for r in store.rows(vid,'messages') if r['role']=='assistant']
+        self.assertEqual([answer],[r['body'] for r in assistants])
 
 
 if __name__=='__main__':unittest.main()

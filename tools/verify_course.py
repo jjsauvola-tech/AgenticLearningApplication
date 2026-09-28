@@ -30,7 +30,13 @@ class Fixture(BaseHTTPRequestHandler):
     def do_POST(self):
         payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.requests.append(payload)
-        self.reply({'message':{'content':'TEST FIXTURE ONLY: source-linked response [1].'}})
+        content='TEST FIXTURE ONLY: source-linked response [1].'
+        if 'format' in payload:
+            field='question' if 'question' in payload['format']['properties'] else 'feedback'
+            source=payload['messages'][0]['content'].split('SOURCE MATERIAL\n',1)[1].split('\n',1)[1]
+            content=json.dumps({field:'What does the selected source explain?' if field=='question' else 'TEST FIXTURE ONLY: compare the answer with the source.',
+                                'evidence':' '.join(source.split())[:200]})
+        self.reply({'message':{'content':content}})
     def reply(self, value):
         payload=json.dumps(value).encode()
         self.send_response(200)
@@ -166,9 +172,9 @@ def main():
             fixture_thread=threading.Thread(target=fixture.serve_forever,daemon=True);fixture_thread.start()
             request('/api/settings',{'model':'ala-test-fixture','ollamaUrl':'http://127.0.0.1:'+str(fixture.server_port)})
             assert request('/api/model-test',{})['models']==['ala-test-fixture']
-            for prompt,scope in [('Explain the source.',anchor),('Create one practice question.',anchor),('Give formative feedback.',anchor),('Explain '+term,{'document_id':None,'page':None})]:
-                answer=request('/api/chat',{**scope,'text':prompt},vid)
-                assert answer['sources'] and answer['answer'].startswith('TEST FIXTURE')
+            for task,prompt,scope in [('chat','Explain the source.',anchor),('question','Create one practice question.',anchor),('feedback','Give formative feedback.',anchor),('chat','Explain '+term,{'document_id':None,'page':None})]:
+                answer=request('/api/chat',{**scope,'text':prompt,'task':task},vid)
+                assert answer['sources'] and answer['answer']
                 assert 'SOURCE MATERIAL' in Fixture.requests[-1]['messages'][0]['content']
             fixture.shutdown();fixture.server_close();fixture_thread.join();fixture=None
             assert reject('/api/chat',{**anchor,'text':'Explain'},503)['error']=='model_unavailable'
