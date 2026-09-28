@@ -13,7 +13,7 @@ ALA is a Windows 11 learning application for arbitrary user-imported courses. Th
 
 ## Learning experience
 
-Three primary views cover Study, AI teacher and Learning verification. Study combines a learning flow, a material reader and a context-aware assistant. The target flow supports editable goals and prerequisites; version 0.1 follows document sections. The teacher view supports notes, practice and cards, with mind maps, visualizations and speech planned. Verification distinguishes formative practice from official institutional assessment.
+Three primary views cover Study, AI teacher and Learning verification. Study combines a learning flow, a material reader and a context-aware assistant. The target flow supports editable goals and prerequisites; version 0.1 follows document sections. Version 0.2 development adds a vault-wide goal list with editable prerequisites, cycle prevention, optional source anchors and self-assessed progress. The teacher view supports notes, practice and cards, with mind maps, visualizations and speech planned. Verification distinguishes formative practice from official institutional assessment.
 
 DOCX, PDF and PPTX import must preserve originals and source anchors. Grouped PowerPoint shapes and separate speaker notes must be handled. Failures, encrypted documents, duplicates, missing text and unsupported visual interpretation must be explained. Source-grounded answers must link back to material. Content instructions must never grant tool permissions.
 

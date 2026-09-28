@@ -4,6 +4,29 @@ ALA is a local learning workspace for Windows. Any course can be imported from D
 
 Version 0.1.0 is the first working study prototype. It implements the material-import and local-storage foundation, configurable UI, notes, study cards, practice history and an optional local Ollama tutor. It is not the completed feature set of the full product specification.
 
+The current source version is **0.2.0-dev**. It adds editable learning goals and
+prerequisites. This development version has been tested from source on Windows;
+a new packaged executable has not yet been verified.
+
+## Learning goals
+
+Open **Learning goals / Oppimistavoitteet** in the workspace toolbar. Create a
+goal, describe what you want to learn, select prerequisite goals and optionally
+link the goal to the material section currently open in Study. Edit a goal to
+change its self-assessed status, prerequisites or source link.
+
+Goals cover the active vault and appear with prerequisites first. Unfinished
+prerequisites, including unfinished earlier prerequisites, are highlighted.
+Cycles are rejected. Status is a personal study record: it does not certify
+competence or restrict access to materials. Deleting a goal removes its links
+but preserves other goals and source material. Goals remain separate from
+document-section progress.
+
+Existing version 0.1 vaults are upgraded automatically. Backups include goals;
+old backups can still be restored. New backups require this version or later
+and cannot be restored by ALA 0.1.0. The current goal view is an ordered list
+with dependency labels; a graphical node-and-edge editor remains future work.
+
 ## Running the Windows build
 
 1. Extract the entire Windows ZIP into a folder.
@@ -39,7 +62,7 @@ The application remains useful without a model. The interface explicitly reports
 ## Current limitations and next milestones
 
 - Exact DOCX/PPTX layout, embedded image interpretation, animations and OCR are not implemented. Original files remain available, and import warnings identify these limitations.
-- The editable learning-goal dependency graph, semantic retrieval, generated mind maps, speech and web search remain planned.
+- Graphical goal editing, semantic retrieval, generated mind maps, speech and web search remain planned. Goal and prerequisite editing is available in the development source.
 - Cloud-provider integrations and encrypted credential storage remain planned. The current AI adapter is local Ollama only.
 - Practice supports written questions, answers and feedback. Automatically scored multiple-choice tests and formal university exam administration remain planned.
 - Imported files with the same name and different content coexist as distinct records; a full version-linking UI remains planned.

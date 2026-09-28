@@ -8,7 +8,7 @@ import uuid
 import zipfile
 import tempfile
 import shutil
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
 from .importers import extract
@@ -33,6 +33,25 @@ CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,document_id TEXT,page IN
 PRAGMA user_version=1;
 '''
 
+GOAL_SCHEMA = '''
+CREATE TABLE IF NOT EXISTS goals(
+ id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL,
+ document_id TEXT,page INTEGER,status TEXT NOT NULL,updated TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS goal_dependencies(
+ goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+ prerequisite_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+ PRIMARY KEY(goal_id,prerequisite_id));
+PRAGMA user_version=2;
+'''
+
+def migrate_goals(path):
+    with closing(sqlite3.connect(path)) as db:
+        version = db.execute('PRAGMA user_version').fetchone()[0]
+        if version not in (1, 2):
+            raise ValueError('unsupported_database')
+        if version == 1:
+            db.executescript('BEGIN IMMEDIATE;\n' + GOAL_SCHEMA + '\nCOMMIT;')
+
 class Store:
     def __init__(self, root):
         self.root = Path(root).resolve()
@@ -46,6 +65,8 @@ class Store:
         self.config['settings'] = {**DEFAULTS, **self.config['settings']}
         if not self.config['vaults']:
             self.create_vault('Oma oppiminen')
+        for vault in self.config['vaults']:
+            migrate_goals(self.vault_path(vault['id'])/'learning.sqlite')
 
     def save_config(self):
         tmp = self.config_path.with_suffix('.tmp')
@@ -62,6 +83,7 @@ class Store:
     def db(self, vid=None):
         con = sqlite3.connect(self.vault_path(vid)/'learning.sqlite', timeout=30)
         con.row_factory = sqlite3.Row
+        con.execute('PRAGMA foreign_keys=ON')
         try:
             yield con
             con.commit()
@@ -77,7 +99,7 @@ class Store:
             path = self.root/'vaults'/vid
             (path/'originals').mkdir(parents=True)
             con = sqlite3.connect(path/'learning.sqlite')
-            con.executescript(SCHEMA)
+            con.executescript(SCHEMA + GOAL_SCHEMA)
             con.close()
             self.config['vaults'].append({'id':vid,'name':name,'created':now()})
             self.config['active'] = vid
@@ -181,6 +203,74 @@ class Store:
         with self.db(vid) as db:
             return [dict(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY rowid DESC')]
 
+    def goals(self, vid):
+        with self.db(vid) as db:
+            goals = [dict(r) for r in db.execute('SELECT * FROM goals ORDER BY rowid')]
+            edges = db.execute('SELECT * FROM goal_dependencies').fetchall()
+        by_id = {g['id']: g for g in goals}
+        for goal in goals:
+            goal['prerequisites'] = [e['prerequisite_id'] for e in edges if e['goal_id'] == goal['id']]
+        ordered, pending, done = [], list(goals), set()
+        while pending:
+            batch = [g for g in pending if set(g['prerequisites']) <= done]
+            if not batch:
+                raise ValueError('goal_cycle')
+            for goal in batch:
+                goal['unmet'] = [p for p in goal['prerequisites']
+                                 if by_id[p]['status'] != 'complete' or by_id[p]['unmet']]
+                ordered.append(goal)
+                done.add(goal['id'])
+                pending.remove(goal)
+        return ordered
+
+    def save_goal(self, vid, values):
+        title, description = values.get('title', ''), values.get('description', '')
+        prerequisites, status = values.get('prerequisites', []), values.get('status', 'waiting')
+        if not isinstance(title, str) or not title.strip() or len(title) > 200:
+            raise ValueError('goal_title_required')
+        if not isinstance(description, str) or len(description) > 12000:
+            raise ValueError('invalid_goal')
+        if status not in ('waiting', 'ongoing', 'complete'):
+            raise ValueError('invalid_goal')
+        if not isinstance(prerequisites, list) or any(not isinstance(p, str) for p in prerequisites):
+            raise ValueError('invalid_goal')
+        gid = values.get('id') or uuid.uuid4().hex
+        if not isinstance(gid, str):
+            raise ValueError('invalid_goal')
+        did, page = values.get('document_id'), values.get('page')
+        if (did is None) != (page is None) or (did is not None and (not isinstance(did, str) or not did)):
+            raise ValueError('invalid_goal')
+        self.anchor(vid, did, page)
+        with self.lock, self.db(vid) as db:
+            graph = {r['id']: set() for r in db.execute('SELECT id FROM goals')}
+            if values.get('id') and gid not in graph:
+                raise ValueError('not_found')
+            if any(p not in graph for p in prerequisites):
+                raise ValueError('goal_missing_prerequisite')
+            for edge in db.execute('SELECT * FROM goal_dependencies'):
+                graph[edge['goal_id']].add(edge['prerequisite_id'])
+            graph[gid] = set(prerequisites)
+            pending, seen = list(prerequisites), set()
+            while pending:
+                current = pending.pop()
+                if current == gid:
+                    raise ValueError('goal_cycle')
+                if current not in seen:
+                    seen.add(current)
+                    pending.extend(graph[current])
+            db.execute('INSERT INTO goals VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET '
+                       'title=excluded.title,description=excluded.description,document_id=excluded.document_id,'
+                       'page=excluded.page,status=excluded.status,updated=excluded.updated',
+                       (gid, title.strip(), description, did, page, status, now()))
+            db.execute('DELETE FROM goal_dependencies WHERE goal_id=?', (gid,))
+            db.executemany('INSERT INTO goal_dependencies VALUES(?,?)', [(gid, p) for p in set(prerequisites)])
+        return gid
+
+    def delete_goal(self, vid, gid):
+        with self.lock, self.db(vid) as db:
+            if not db.execute('DELETE FROM goals WHERE id=?', (gid,)).rowcount:
+                raise ValueError('not_found')
+
     def search(self, vid, query, did=None):
         terms = re.findall(r'\w+', query.lower())[:12]
         if not terms: return []
@@ -207,7 +297,7 @@ class Store:
                 dst.close()
             out = Path(tmp)/'backup.zip'
             with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
-                z.writestr('manifest.json',json.dumps({'schema':1,'created':now(),'name':next(v['name'] for v in self.config['vaults'] if v['id']==vid)}))
+                z.writestr('manifest.json',json.dumps({'schema':2,'created':now(),'name':next(v['name'] for v in self.config['vaults'] if v['id']==vid)}))
                 z.write(dbfile,'learning.sqlite')
                 for p in (path/'originals').glob('*'):
                     if p.is_file() and p.suffix != '.tmp': z.write(p,'originals/'+p.name)
@@ -222,7 +312,7 @@ class Store:
             names={i.filename for i in infos}
             if not {'manifest.json','learning.sqlite'} <= names: raise ValueError('invalid_backup')
             manifest=json.loads(z.read('manifest.json'))
-            if manifest.get('schema')!=1: raise ValueError('invalid_backup')
+            if manifest.get('schema') not in (1,2): raise ValueError('invalid_backup')
             for item in infos:
                 if item.filename in ('manifest.json','learning.sqlite'): continue
                 if not re.fullmatch(r'originals/[a-f0-9]{64}\.(pdf|docx|pptx)',item.filename): raise ValueError('invalid_backup')
@@ -234,7 +324,9 @@ class Store:
                     if con.execute('PRAGMA integrity_check').fetchone()[0]!='ok': raise ValueError('invalid_backup')
                     required={'documents','notes','progress','messages','cards','attempts'}
                     tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                    if not required <= tables or con.execute('PRAGMA user_version').fetchone()[0]!=1: raise ValueError('invalid_backup')
+                    version=con.execute('PRAGMA user_version').fetchone()[0]
+                    if version==2: required |= {'goals','goal_dependencies'}
+                    if not required <= tables or version!=manifest['schema']: raise ValueError('invalid_backup')
                     if con.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0]: raise ValueError('invalid_backup')
                     for sha,fmt,pages in con.execute('SELECT sha256,format,pages FROM documents'):
                         if not re.fullmatch(r'[a-f0-9]{64}',sha) or fmt not in ('pdf','docx','pptx'): raise ValueError('invalid_backup')
@@ -242,6 +334,7 @@ class Store:
                         if not p.is_file() or hashlib.sha256(p.read_bytes()).hexdigest()!=sha: raise ValueError('invalid_backup')
                         if not isinstance(json.loads(pages),list): raise ValueError('invalid_backup')
                 finally: con.close()
+                migrate_goals(stage/'learning.sqlite')
                 # Complete all file work before exposing a restored vault in the registry.
                 with self.lock:
                     vid=uuid.uuid4().hex

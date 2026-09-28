@@ -66,7 +66,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             url=urlparse(self.path)
             path=url.path
-            if not mutation and path in ('/','/app.js','/style.css'):
+            if not mutation and path in ('/','/app.js','/goals.js','/style.css'):
                 filename='index.html' if path=='/' else path[1:]
                 mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'}[Path(filename).suffix]
                 return self.send((self.server.web/filename).read_bytes(),mime=mime+'; charset=utf-8')
@@ -99,6 +99,11 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/api/document/'):
                 return self.send(store.document(vid,path.rsplit('/',1)[1]))
             if path=='/api/search': return self.send(store.search(vid,q.get('q',[''])[0]))
+            if path=='/api/goals':
+                return self.send({'id':store.save_goal(vid,body)} if mutation else store.goals(vid))
+            if path=='/api/goals/delete' and mutation:
+                store.delete_goal(vid,body['id'])
+                return self.send({'ok':True})
             if path in ('/api/notes','/api/messages','/api/cards','/api/attempts') and not mutation:
                 return self.send(store.rows(vid,path.split('/')[-1]))
             if path=='/api/notes' and mutation: return self.send({'id':store.save_note(vid,body)})
