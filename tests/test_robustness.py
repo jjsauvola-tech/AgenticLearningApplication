@@ -48,9 +48,17 @@ class RobustHttpTests(core.HttpTests):
         with self.request('/api/ping') as response:self.assertEqual(200,response.status)
 
     def test_ui_asset_snapshot_is_complete(self):
-        for name in ('app.js','goals.js','imports.js','chat.js','recovery.js'):
+        for name in ('app.js','goals.js','imports.js','chat.js','recovery.js','agents.js','agents.css'):
             with self.request('/'+name) as response:self.assertTrue(response.read())
         self.assertIn('recovery.js',self.server.assets['index.html'].decode())
+
+    def test_agent_images_are_served_without_exposing_project_files(self):
+        with self.request('/assets/svla-faces/base.png') as response:
+            self.assertEqual('image/png',response.headers['Content-Type'])
+            self.assertTrue(response.read().startswith(b'\x89PNG'))
+        for path in ('/../ala/server.py','/docs/SVLA_ASSET_PROVENANCE.json','/assets/missing.png'):
+            with self.assertRaises(urllib.error.HTTPError) as error:self.request(path)
+            self.assertIn(error.exception.code,(403,404))
 
     def test_default_vault_is_captured_before_another_tab_switches(self):
         store=self.server.store

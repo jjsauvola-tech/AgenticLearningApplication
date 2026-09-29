@@ -3,14 +3,14 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');const fs=require('node:fs');
 function setup(){
  const elements=new Map(),listeners={},stored=new Map();
- const ctx={console,AbortController,URL,Set,Map,Date,Promise,Error,TypeError,
-  location:{hash:'#test',pathname:'/'},history:{replaceState(){}},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)},
+ const ctx={console,AbortController,URL,URLSearchParams,Set,Map,Date,Promise,Error,TypeError,
+  location:{hash:'#test',pathname:'/',search:''},history:{replaceState(){}},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)},
   matchMedia:()=>({matches:false,addEventListener(){}}),setInterval(){return 1},clearInterval(){},setTimeout,clearTimeout,
   window:{addEventListener(){},scrollTo(){}},navigator:{},
   document:{querySelector:s=>elements.get(s)||null,addEventListener:(n,fn)=>{listeners[n]=fn},createElement:()=>({append(){},replaceChildren(){},setAttribute(){}}),body:{prepend(){},classList:{toggle(){}}}},
   fetch:async()=>({ok:true,json:async()=>({})})};
  vm.createContext(ctx);
- for(const file of ['app.js','goals.js','imports.js','chat.js','recovery.js'])vm.runInContext(fs.readFileSync('web/'+file,'utf8'),ctx,{filename:file});
+ for(const file of ['app.js','goals.js','imports.js','chat.js','recovery.js','agents.js'])vm.runInContext(fs.readFileSync('web/'+file,'utf8'),ctx,{filename:file});
  return {ctx,elements,listeners,run:code=>vm.runInContext(code,ctx)};
 }
 test('all production scripts load in order without early dependency errors',()=>{

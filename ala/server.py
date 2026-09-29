@@ -31,7 +31,7 @@ class AppServer(ThreadingHTTPServer):
             raise
         self.web = Path(web)
         # A running build cannot mix old routes and newly edited scripts.
-        self.assets = {p.name:p.read_bytes() for p in self.web.iterdir() if p.suffix in ('.html','.js','.css')}
+        self.assets = {p.relative_to(self.web).as_posix():p.read_bytes() for p in self.web.rglob('*') if p.is_file() and p.suffix in ('.html','.js','.css','.png')}
         self.request_slots = threading.BoundedSemaphore(16)
         self.heavy_slots = threading.BoundedSemaphore(2)
         self.token = secrets.token_urlsafe(32)
@@ -110,10 +110,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             url=urlparse(self.path)
             path=url.path
-            if not mutation and path in ('/','/app.js','/goals.js','/imports.js','/chat.js','/recovery.js','/style.css'):
-                filename='index.html' if path=='/' else path[1:]
-                mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'}[Path(filename).suffix]
-                return self.send(self.server.assets[filename],mime=mime+'; charset=utf-8')
+            asset='index.html' if path=='/' else path.removeprefix('/')
+            if not mutation and asset in self.server.assets:
+                mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'application/javascript; charset=utf-8','.png':'image/png'}[Path(asset).suffix]
+                return self.send(self.server.assets[asset],mime=mime)
             if not self.authorized(mutation): return self.send({'error':'unauthorized'},403)
             self.server.last_activity=time.monotonic()
             if path in ('/api/import','/api/restore','/api/backup','/api/chat') or path.startswith('/api/preview/'):

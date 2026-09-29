@@ -1,0 +1,51 @@
+{
+  "source": "C:/SVLA/svla-gpu-agents/sga/static/faces",
+  "revision": "f37817096f9e330753e8a115cc1b380a2f33f9e0",
+  "permission": "User explicitly requested reuse in this task. Source make_faces.py identifies user-generated graphics dated 2026-09-11. No separate public redistribution license found.",
+  "files": [
+    {
+      "file": "base.png",
+      "sha256": "2717272609bac96e43daac52ed48571c6e3f5a2326b651797142ce71451fe0a4"
+    },
+    {
+      "file": "expr/neutral.png",
+      "sha256": "624ce09a8af556b2ebb75344694f7a783409b6069b50fd42bb1621ea2c056b1f"
+    },
+    {
+      "file": "expr/reading.png",
+      "sha256": "65dc4c4b4164d369f6cbda0a3da681eef18257f22181d2b848cabe3ac13344d0"
+    },
+    {
+      "file": "expr/thinking.png",
+      "sha256": "5c79d9ce39e56fb6bc2acae78c9d2cdd6afe57e3d9ea9ba93523304b61f1e057"
+    },
+    {
+      "file": "expr/questioning.png",
+      "sha256": "ce56ba4ba356ca4145193284938d0cb5b4df17f7520615ec9f95286aa107909a"
+    },
+    {
+      "file": "expr/success.png",
+      "sha256": "1d21c5acd0a250006f78e4601b2dcbf52201298ba33564f8a22895e2f5a8724d"
+    },
+    {
+      "file": "expr/fixing.png",
+      "sha256": "15447c5c05163840c5b17db3898423ab370598bdb8674ef50cfce154b4b8d386"
+    },
+    {
+      "file": "acc/book.png",
+      "sha256": "7fd0a6ce178ba3a856166bd14ae01c2ba246f10b1608ad29117d8fab22289a92"
+    },
+    {
+      "file": "acc/question.png",
+      "sha256": "da7cda6af0073a4cc011f33d951d53b362efea9ffcecce0bc2325c9f86dbe785"
+    },
+    {
+      "file": "acc/check.png",
+      "sha256": "6960228d442bf9774003eff98fa3097fa15984503bf2eec3ea0bb17be9d835d0"
+    },
+    {
+      "file": "acc/gear.png",
+      "sha256": "ed4007bb200e31046863976400bd3d31bbfa3b16f2a9bf8aec8c86cd972020ad"
+    }
+  ]
+}
