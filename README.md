@@ -70,7 +70,7 @@ with dependency labels; a graphical node-and-edge editor remains future work.
 
 Python, Node.js, Microsoft Office and a developer environment are not required by the packaged application. Data is stored under the current Windows user's `%LOCALAPPDATA%\ALA`. Settings → Backup and restore exports the active vault to an `.ala.zip` archive. Restoring creates a separate vault and verifies original-file hashes. The source location of an imported file is not needed after import.
 
-Exit from Settings → Exit application. The normal launcher also shuts down its local service after three minutes without browser activity. The application binds only to `127.0.0.1`, uses a random port and requires a session token for its API. The current prototype is unsigned; institution-wide deployment and signed installers remain release work.
+Exit from Settings → Exit application. The launcher reuses one service per data directory. Background browser tabs and computer sleep do not trigger automatic shutdown. The application binds only to `127.0.0.1`, uses a random port and requires a session token for its API. The current prototype is unsigned; institution-wide deployment and signed installers remain release work.
 
 ## Available now
 
@@ -78,7 +78,7 @@ Exit from Settings → Exit application. The normal launcher also shuts down its
 - Show/hide learning-flow and assistant panels; adjust panel widths and speaker-note visibility.
 - Create and switch independent SQLite learning vaults; preserve preferences across restarts.
 - Import DOCX paragraphs and tables, PPTX nested groups and speaker notes, and PDF pages.
-- View original PDF pages locally. DOCX and PPTX use a clearly labelled structured text view.
+- View original PDF pages locally. On Windows with PowerPoint installed, PPTX slides open as locally rendered images; Show slide / Show text switches the center pane. DOCX uses a structured text view.
 - Local search with source navigation, source-linked editable notes and study progress.
 - Create study cards, save practice answers and self-review, revisit the original source.
 - Optional Ollama chat, source context and history; generate a practice question or request formative feedback.
@@ -95,7 +95,7 @@ The application remains useful without a model. The interface explicitly reports
 
 ## Current limitations and next milestones
 
-- Exact DOCX/PPTX layout, embedded image interpretation, animations and OCR are not implemented. Original files remain available, and import warnings identify these limitations.
+- Exact DOCX layout, embedded image interpretation, animations and OCR are not implemented. PPTX previews are static and require installed PowerPoint on Windows. Original files remain available, and import warnings identify these limitations.
 - Graphical goal editing, semantic retrieval, generated mind maps, speech and web search remain planned. Goal and prerequisite editing is available in the development source.
 - Cloud-provider integrations and encrypted credential storage remain planned. The current AI adapter is local Ollama only.
 - Practice supports written questions, answers and feedback. Automatically scored multiple-choice tests and formal university exam administration remain planned.
@@ -133,3 +133,18 @@ python tools/smoke_packaged.py dist/ALA/ALA.exe
 Unit and HTTP tests create synthetic biology content, without depending on any particular real course. `tools/smoke_packaged.py` starts the actual EXE, imports all three formats, renders a PDF, writes notes, saves settings, exports a backup and restarts to check persistence. It uses a path containing spaces and a non-ASCII character.
 
 See `QA_REPORT.md` for the scope of the executed checks and `PRODUCT_REQUIREMENTS.md` for the product direction.
+
+Chat answers include Copy to clipboard, Save to notes (with source links), and Read full answer. Expand conversation opens a larger workspace; the side panel height and full-answer window can be resized.
+
+
+## Stability verification
+
+Run `python -m unittest discover -s tests -q` and `node --test tests/test_recovery.cjs tests/test_chat.cjs tests/test_import_plan.cjs`.
+For a real external corpus, run `python tools/verify_robustness.py PATH_TO_RELEASE --seconds 300 --report data/robustness-report.json`.
+The latter imports into a temporary vault, exercises four concurrent HTTP clients, restores a backup, and checks that input hashes remain unchanged.
+
+Document parsing and rendering run in disposable processes with deadlines. The API limits active requests and expensive jobs; overload returns a retryable busy response. A failed optional history load leaves the material reader usable. Local rotating `diagnostics.log` files contain event IDs and code locations, not document text or tokens.
+
+Running services snapshot the web assets at startup. After source changes, exit through Settings and launch again to test the new build. Existing open tabs are not a substitute for testing the new version.
+
+See `QA_ROBUSTNESS.md` for completed tests and remaining release gates. A short load test does not establish all-day reliability or clean-machine compatibility.

@@ -77,9 +77,8 @@ class Store:
             migrate_goals(self.vault_path(vault['id'])/'learning.sqlite')
 
     def save_config(self):
-        tmp = self.config_path.with_suffix('.tmp')
-        tmp.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding='utf-8')
-        os.replace(tmp, self.config_path)
+        from .lifecycle import atomic_json
+        atomic_json(self.config_path,self.config)
 
     def vault_path(self, vid=None):
         vid = vid or self.config['active']
@@ -109,16 +108,24 @@ class Store:
             con = sqlite3.connect(path/'learning.sqlite')
             con.executescript(SCHEMA + GOAL_SCHEMA + MESSAGE_SOURCE_SCHEMA)
             con.close()
+            previous = json.loads(json.dumps(self.config))
             self.config['vaults'].append({'id':vid,'name':name,'created':now()})
             self.config['active'] = vid
-            self.save_config()
+            try: self.save_config()
+            except BaseException:
+                self.config = previous
+                raise
             return vid
 
     def switch(self, vid):
         with self.lock:
             self.vault_path(vid)
+            previous = self.config['active']
             self.config['active'] = vid
-            self.save_config()
+            try: self.save_config()
+            except BaseException:
+                self.config['active'] = previous
+                raise
 
     def settings(self, values):
         with self.lock:
@@ -137,8 +144,12 @@ class Store:
                 raise ValueError('local_endpoint_required')
             new['ollamaUrl'] = new['ollamaUrl'].rstrip('/')
             new['model'] = str(new['model'])[:200]
+            previous = self.config['settings']
             self.config['settings'] = new
-            self.save_config()
+            try: self.save_config()
+            except BaseException:
+                self.config['settings'] = previous
+                raise
             return new
 
     def state(self):
@@ -168,14 +179,14 @@ class Store:
         doc = self.document(vid, did)
         return self.vault_path(vid)/'originals'/(doc['sha256']+'.'+doc['format'])
 
-    def add_document(self, vid, name, data, course):
+    def add_document(self, vid, name, data, course, parser=extract):
         self.vault_path(vid)
         name = Path(name.replace('\\','/')).name[:200]
         digest = hashlib.sha256(data).hexdigest()
         with self.db(vid) as db:
             existing = db.execute('SELECT id FROM documents WHERE sha256=?',(digest,)).fetchone()
         if existing: return {'id':existing['id'],'duplicate':True}
-        parsed = extract(name, data)
+        parsed = parser(name, data)
         did = uuid.uuid4().hex
         with self.lock:
             with self.db(vid) as db:
@@ -357,7 +368,11 @@ class Store:
                     if (stage/'originals').exists(): shutil.copytree(stage/'originals',prepared/'originals')
                     else: (prepared/'originals').mkdir()
                     os.replace(prepared,target)
+                    previous = json.loads(json.dumps(self.config))
                     self.config['vaults'].append({'id':vid,'name':str(name or manifest.get('name','Restored')).strip()[:100] or 'Restored','created':now()})
                     self.config['active']=vid
-                    self.save_config()
+                    try: self.save_config()
+                    except BaseException:
+                        self.config = previous
+                        raise
                     return vid

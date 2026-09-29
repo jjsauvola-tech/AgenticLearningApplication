@@ -15,16 +15,55 @@ from . import __version__
 from .storage import Store, now
 from .tutor import practice_schema, practice_instruction, validate_practice
 from .importers import MAX_FILE, ImportProblem
+from .lifecycle import InstanceLock
+from .workers import extract_isolated, run_worker
+from .diagnostics import create_logger, safe_trace
 
 class AppServer(ThreadingHTTPServer):
-    daemon_threads = True
+    daemon_threads = False
     def __init__(self, root, web, port=0):
-        self.store = Store(root)
+        self.instance_lock = InstanceLock(root)
+        try:
+            self.store = Store(root)
+            self.logger = create_logger(root)
+        except BaseException:
+            self.instance_lock.close()
+            raise
         self.web = Path(web)
+        # A running build cannot mix old routes and newly edited scripts.
+        self.assets = {p.name:p.read_bytes() for p in self.web.iterdir() if p.suffix in ('.html','.js','.css')}
+        self.request_slots = threading.BoundedSemaphore(16)
+        self.heavy_slots = threading.BoundedSemaphore(2)
         self.token = secrets.token_urlsafe(32)
         self.render_lock = threading.Lock()
         self.last_activity = time.monotonic()
-        super().__init__(('127.0.0.1',port), Handler)
+        try:
+            super().__init__(('127.0.0.1',port), Handler)
+        except BaseException:
+            self.instance_lock.close()
+            for handler in self.logger.handlers: handler.close()
+            raise
+        self.cookie_name = 'ala_session_' + str(self.server_port)
+
+    def process_request(self, request, address):
+        request.settimeout(30)
+        if not self.request_slots.acquire(blocking=False):
+            try: request.sendall(b'HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: close\r\n\r\n{"error":"server_busy"}')
+            finally: self.shutdown_request(request)
+            return
+        try: super().process_request(request,address)
+        except BaseException:
+            self.request_slots.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try: super().process_request_thread(request,address)
+        finally: self.request_slots.release()
+
+    def server_close(self):
+        super().server_close()
+        self.instance_lock.close()
+        for handler in self.logger.handlers: handler.close()
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'ALA'
@@ -53,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
         if not token and not mutation:
             from http.cookies import SimpleCookie
             cookie=SimpleCookie(self.headers.get('Cookie',''))
-            if 'ala_session' in cookie: token=cookie['ala_session'].value
+            if self.server.cookie_name in cookie: token=cookie[self.server.cookie_name].value
         return hmac.compare_digest(token,self.server.token)
 
     def read(self, limit=MAX_FILE):
@@ -65,28 +104,42 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self): self.route(True)
 
     def route(self, mutation):
+        self.event_id = uuid.uuid4().hex[:12]
+        started = time.monotonic()
+        heavy = False
         try:
             url=urlparse(self.path)
             path=url.path
-            if not mutation and path in ('/','/app.js','/goals.js','/imports.js','/style.css'):
+            if not mutation and path in ('/','/app.js','/goals.js','/imports.js','/chat.js','/recovery.js','/style.css'):
                 filename='index.html' if path=='/' else path[1:]
                 mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'}[Path(filename).suffix]
-                return self.send((self.server.web/filename).read_bytes(),mime=mime+'; charset=utf-8')
+                return self.send(self.server.assets[filename],mime=mime+'; charset=utf-8')
             if not self.authorized(mutation): return self.send({'error':'unauthorized'},403)
             self.server.last_activity=time.monotonic()
+            if path in ('/api/import','/api/restore','/api/backup','/api/chat') or path.startswith('/api/preview/'):
+                heavy = self.server.heavy_slots.acquire(blocking=False)
+                if not heavy: return self.send({'error':'server_busy','event_id':self.event_id},503)
             store=self.server.store
             q=parse_qs(url.query)
-            vid=self.headers.get('X-ALA-Vault') or q.get('vault',[None])[0]
+            vid=self.headers.get('X-ALA-Vault') or q.get('vault',[None])[0] or store.state()['active']
             if path=='/api/bootstrap':
-                return self.send({**store.state(),'version':__version__},extra={'Set-Cookie':'ala_session='+self.server.token+'; HttpOnly; SameSite=Strict; Path=/'})
+                return self.send({**store.state(),'version':__version__},extra={'Set-Cookie':self.server.cookie_name+'='+self.server.token+'; HttpOnly; SameSite=Strict; Path=/'})
             if path=='/api/state': return self.send({**store.state(),'version':__version__})
+            if path=='/api/client-error' and mutation:
+                report=json.loads(self.read(4096) or b'{}')
+                filename=report.get('file','')
+                if filename not in self.server.assets: filename='unknown'
+                line=report.get('line',0)
+                if not isinstance(line,int): line=0
+                self.server.logger.warning('client_error event=%s file=%s line=%s',self.event_id,filename,line)
+                return self.send({'event_id':self.event_id})
             if path=='/api/ping': return self.send({'ok':True})
             if path=='/api/shutdown' and mutation:
                 self.send({'ok':True})
                 threading.Thread(target=self.server.shutdown,daemon=True).start()
                 return
             if mutation and path=='/api/import':
-                return self.send(store.add_document(vid,unquote(self.headers.get('X-Filename','')),self.read(),unquote(self.headers.get('X-Course',''))))
+                return self.send(store.add_document(vid,unquote(self.headers.get('X-Filename','')),self.read(),unquote(self.headers.get('X-Course','')),parser=extract_isolated))
             if mutation and path=='/api/restore':
                 return self.send({'id':store.restore(self.read(MAX_FILE*3),unquote(self.headers.get('X-Vault-Name','')))})
             if not mutation and path=='/api/backup':
@@ -144,26 +197,25 @@ class Handler(BaseHTTPRequestHandler):
                 _,_,_,did,page=path.split('/')
                 doc=store.document(vid,did)
                 store.anchor(vid,did,int(page))
-                if doc['format']!='pdf': raise ValueError('not_found')
-                # PDFium is not thread safe: serialize rendering across request threads.
+                if doc['format'] not in ('pdf','pptx'): raise ValueError('not_found')
+                original=store.original(vid,did)
+                # Native libraries and Office cannot crash or block the API process.
                 with self.server.render_lock:
-                    import pypdfium2 as pdfium
-                    pdf=pdfium.PdfDocument(str(store.original(vid,did)))
-                    p=pdf[int(page)-1]
-                    bitmap=p.render(scale=min(1.6,1600/max(p.get_width(),1)))
-                    img=bitmap.to_pil()
-                    out=io.BytesIO()
-                    img.save(out,format='PNG')
-                    img.close();bitmap.close();p.close();pdf.close()
-                return self.send(out.getvalue(),mime='image/png')
+                    image=run_worker(doc['format'],original,int(page))
+                return self.send(image,mime='image/png')
             return self.send({'error':'not_found'},404)
         except (ValueError,KeyError,ImportProblem) as e:
             return self.send({'error':str(e).strip("'")[:180]},400)
         except Exception as e:
             if isinstance(e,(urllib.error.URLError,TimeoutError,ConnectionError)):
                 return self.send({'error':'model_unavailable'},503)
-            # Never include paths, source content or credentials in error messages.
-            return self.send({'error':'operation_failed','type':type(e).__name__},500)
+            self.server.logger.error('failure event=%s type=%s frames=%s',self.event_id,type(e).__name__,safe_trace(e))
+            return self.send({'error':'operation_failed','event_id':self.event_id},500)
+        finally:
+            if heavy: self.server.heavy_slots.release()
+            elapsed = time.monotonic()-started
+            if elapsed > 1:
+                self.server.logger.info('slow_request event=%s seconds=%.3f',self.event_id,elapsed)
 
     def save_message(self, vid,did,page,role,text,sources=None):
         self.server.store.anchor(vid,did,page)

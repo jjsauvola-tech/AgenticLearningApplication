@@ -31,10 +31,6 @@ $arguments = @('"' + (Join-Path $projectRoot 'main.py') + '"',
 if ($NoBrowser) { $arguments += '--no-browser' }
 $process = Start-Process -FilePath $pythonPath -ArgumentList $arguments -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardError $errorLog -PassThru
 for ($attempt = 0; $attempt -lt 100; $attempt++) {
-    if ($process.HasExited) {
-        $details = Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue
-        throw "ALA could not start. $details"
-    }
     if (Test-Path -LiteralPath $runtimeFile) {
         try {
             $runtime = Get-Content -LiteralPath $runtimeFile -Raw | ConvertFrom-Json
@@ -44,6 +40,10 @@ for ($attempt = 0; $attempt -lt 100; $attempt++) {
             Write-Output "Startup details: $runtimeFile"
             exit 0
         } catch { }
+    }
+    if ($process.HasExited) {
+        $details = Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue
+        throw "ALA could not start. $details"
     }
     Start-Sleep -Milliseconds 150
 }
