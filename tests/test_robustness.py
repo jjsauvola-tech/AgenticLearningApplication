@@ -19,6 +19,26 @@ from tests.test_core import docx_bytes,pdf_bytes
 ROOT=Path(__file__).resolve().parents[1]
 
 class RobustHttpTests(core.HttpTests):
+    def test_new_tab_recovers_write_token_from_authenticated_cookie(self):
+        with self.request('/api/bootstrap') as response:
+            cookie=response.headers['Set-Cookie'].split(';')[0]
+        for old_token in ('','expired-tab-token'):
+            request=urllib.request.Request(self.base+'/api/bootstrap',headers={'Cookie':cookie,'X-ALA-Token':old_token})
+            with urllib.request.urlopen(request) as response:token=json.load(response)['sessionToken']
+            self.assertEqual(self.server.token,token)
+            request=urllib.request.Request(self.base+'/api/notes',data=b'{"title":"New tab","body":"saved"}',headers={'X-ALA-Token':token,'Content-Type':'application/json'})
+            with urllib.request.urlopen(request) as response:self.assertEqual(200,response.status)
+
+    def test_session_recovery_does_not_allow_unauthenticated_or_cross_origin_access(self):
+        cookie=self.server.cookie_name+'='+self.server.token
+        for headers in ({},{'Cookie':self.server.cookie_name+'=expired'},{'Cookie':cookie,'Origin':'https://malicious.example'},{'Cookie':cookie,'Host':'malicious.example'}):
+            request=urllib.request.Request(self.base+'/api/bootstrap',headers=headers)
+            with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(request)
+            self.assertEqual(403,error.exception.code)
+        request=urllib.request.Request(self.base+'/api/notes',data=b'{}',headers={'Cookie':cookie,'Content-Type':'application/json'})
+        with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(request)
+        self.assertEqual(403,error.exception.code)
+
     def test_second_writer_rejected_and_lock_released(self):
         with self.assertRaises(AlreadyRunning): AppServer(self.tmp.name,ROOT/'web')
 

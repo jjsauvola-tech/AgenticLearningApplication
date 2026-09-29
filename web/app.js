@@ -7,7 +7,7 @@ en:{workspace:'Learning workspace',lecture:'Study',teacher:'AI teacher',verifica
 };
 const S={settings:{language:'fi'},vaults:[],active:null,documents:[],doc:null,page:1,view:'lecture',course:'',chatAll:false,notes:[],cards:[],attempts:[],messages:[],goals:[],busy:false};
 const t=k=>words[S.settings.language]?.[k]??words.en[k]??words[S.settings.language].unknown;
-const token=location.hash.slice(1)||sessionStorage.getItem('alaToken')||'';
+let token=location.hash.slice(1)||sessionStorage.getItem('alaToken')||'';
 if(token)sessionStorage.setItem('alaToken',token);history.replaceState(null,'',location.pathname+(location.search||''));
 async function api(path,body,opts={}){
  const headers={'X-ALA-Token':token,'X-ALA-Vault':S.active||'',...opts.headers};

@@ -16,6 +16,13 @@ function setup(){
 test('all production scripts load in order without early dependency errors',()=>{
  const {listeners}=setup();assert.equal(typeof listeners.DOMContentLoaded,'function');
 });
+test('boot replaces a stale tab token before loading or writing',async()=>{
+ const {ctx,run}=setup();let loadedToken;
+ ctx.api=async path=>{assert.equal(path,'/api/bootstrap');return {sessionToken:'current-session'};};
+ ctx.load=async()=>{loadedToken=run('token');};ctx.showConnectionStatus=()=>{};
+ await ctx.boot();assert.equal(loadedToken,'current-session');
+ assert.equal(ctx.sessionStorage.getItem('alaToken'),'current-session');
+});
 test('optional history failure does not prevent material load',async()=>{
  const {ctx,run}=setup();ctx.api=async path=>{
  if(path==='/api/state')return {active:'a',settings:{language:'fi'},vaults:[]};

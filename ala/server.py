@@ -83,13 +83,14 @@ class Handler(BaseHTTPRequestHandler):
         try: self.wfile.write(value)
         except (BrokenPipeError,ConnectionResetError): pass
 
-    def authorized(self, mutation=False):
+    def authorized(self, mutation=False, bootstrap=False):
         host=self.headers.get('Host','')
         if host != '127.0.0.1:'+str(self.server.server_port): return False
         origin=self.headers.get('Origin')
         if origin and origin != 'http://'+host: return False
         token=self.headers.get('X-ALA-Token','')
-        if not token and not mutation:
+        if hmac.compare_digest(token,self.server.token): return True
+        if not mutation and (not token or bootstrap):
             from http.cookies import SimpleCookie
             cookie=SimpleCookie(self.headers.get('Cookie',''))
             if self.server.cookie_name in cookie: token=cookie[self.server.cookie_name].value
@@ -114,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
             if not mutation and asset in self.server.assets:
                 mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'application/javascript; charset=utf-8','.png':'image/png'}[Path(asset).suffix]
                 return self.send(self.server.assets[asset],mime=mime)
-            if not self.authorized(mutation): return self.send({'error':'unauthorized'},403)
+            if not self.authorized(mutation,bootstrap=path=='/api/bootstrap'): return self.send({'error':'unauthorized'},403)
             self.server.last_activity=time.monotonic()
             if path in ('/api/import','/api/restore','/api/backup','/api/chat') or path.startswith('/api/preview/'):
                 heavy = self.server.heavy_slots.acquire(blocking=False)
@@ -123,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
             q=parse_qs(url.query)
             vid=self.headers.get('X-ALA-Vault') or q.get('vault',[None])[0] or store.state()['active']
             if path=='/api/bootstrap':
-                return self.send({**store.state(),'version':__version__},extra={'Set-Cookie':self.server.cookie_name+'='+self.server.token+'; HttpOnly; SameSite=Strict; Path=/'})
+                return self.send({**store.state(),'version':__version__,'sessionToken':self.server.token},extra={'Set-Cookie':self.server.cookie_name+'='+self.server.token+'; HttpOnly; SameSite=Strict; Path=/'})
             if path=='/api/state': return self.send({**store.state(),'version':__version__})
             if path=='/api/client-error' and mutation:
                 report=json.loads(self.read(4096) or b'{}')

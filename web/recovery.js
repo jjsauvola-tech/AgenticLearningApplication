@@ -37,7 +37,7 @@ function showConnectionStatus(error){
 }
 async function boot(){
  if(booting)return;booting=true;
- try{await api('/api/bootstrap');await load();connectionLost=false;recoveryError=null;showConnectionStatus();}
+ try{const session=await api('/api/bootstrap');if(session.sessionToken){token=session.sessionToken;sessionStorage.setItem('alaToken',token);}await load();connectionLost=false;recoveryError=null;showConnectionStatus();}
  catch(e){
   if(!$('#vaultSelect')){
    const main=document.createElement('main');main.className='empty';const title=document.createElement('h1');title.textContent='ALA';
