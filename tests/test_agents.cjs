@@ -1,7 +1,17 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');const vm=require('node:vm');
-const {projectLearningModules}=require('../web/agents.js');
+const {projectLearningModules,preferredModuleDocument,pairedModuleMaterials}=require('../web/agents.js');
+test('document and slide selectors stay in the same module',()=>{
+ const docs=[{id:'guide',course:'A',format:'docx'},{id:'deck',course:'A',format:'pptx'},{id:'other',course:'B',format:'pptx'}];
+ assert.deepEqual(pairedModuleMaterials(docs,docs[0]),{documents:[docs[0]],slides:[docs[1]]});
+ assert.equal(pairedModuleMaterials(docs,docs[2]).documents.length,0);
+});
+test('module navigation prefers slides and preserves document fallback',()=>{
+ const docs=[{id:'guide',format:'docx'},{id:'slides',format:'pptx'}];
+ assert.equal(preferredModuleDocument(docs).id,'slides');
+ assert.equal(preferredModuleDocument(docs.slice(0,1)).id,'guide');
+});
 
 test('module progress counts study marks and clamps invalid completion',()=>{
  const result=projectLearningModules([

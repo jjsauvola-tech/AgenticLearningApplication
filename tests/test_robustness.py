@@ -140,6 +140,7 @@ class LauncherTests(unittest.TestCase):
                 while time.monotonic()<deadline and not (folder/'recovered.json').exists():time.sleep(.1)
                 recovered=json.loads((folder/'recovered.json').read_text())
                 self.assertEqual(successor.pid,recovered['pid'])
+                self.assertEqual(runtimes[0]['url'],recovered['url'])
                 base,token=recovered['url'].split('#')
                 with urllib.request.urlopen(urllib.request.Request(base+'api/ping',headers={'X-ALA-Token':token})) as response:self.assertEqual(200,response.status)
                 with urllib.request.urlopen(urllib.request.Request(base+'api/shutdown',data=b'{}',headers={'X-ALA-Token':token})) as response:self.assertEqual(200,response.status)

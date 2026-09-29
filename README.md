@@ -4,8 +4,9 @@ ALA is a local learning workspace for Windows. Any course can be imported from D
 
 Version 0.1.0 is the first working study prototype. It implements the material-import and local-storage foundation, configurable UI, notes, study cards, practice history and an optional local Ollama tutor. It is not the completed feature set of the full product specification.
 
-The current source version is **0.2.0-dev**. It adds editable learning goals and
-prerequisites, recursive course-folder import and persistent tutor source links.
+The current source version is **0.2.3-dev**. It adds persistent desktop sessions, recoverable note drafts, local AI startup,
+paired document/slide navigation and module/topic agent navigation.
+See [continuing on another PC](docs/HANDOFF_0_2_3.md) for setup and data transfer.
 See `QA_COURSE_WORKFLOW.md` for the ordered real-course verification and remaining
 AI-quality and browser-download findings. This version has been tested from source on Windows;
 a new packaged executable has not yet been verified.

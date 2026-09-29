@@ -35,6 +35,8 @@ class AppServer(ThreadingHTTPServer):
         self.request_slots = threading.BoundedSemaphore(16)
         self.heavy_slots = threading.BoundedSemaphore(2)
         self.token = secrets.token_urlsafe(32)
+        from .ai_runtime import AIRuntime
+        self.ai_runtime = AIRuntime()
         self.render_lock = threading.Lock()
         self.last_activity = time.monotonic()
         try:
@@ -126,6 +128,16 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/bootstrap':
                 return self.send({**store.state(),'version':__version__,'sessionToken':self.server.token},extra={'Set-Cookie':self.server.cookie_name+'='+self.server.token+'; HttpOnly; SameSite=Strict; Path=/'})
             if path=='/api/state': return self.send({**store.state(),'version':__version__})
+            if path=='/api/topics' and not mutation:
+                modules={}
+                for doc in store.documents(vid):
+                    if doc['course'] not in modules or doc['format']=='pptx':modules[doc['course']]=doc
+                return self.send([{'module':course,'document_id':doc['id'],'page':p['number'],'title':p['title'].split(' · ',1)[-1]}
+                    for course,doc in modules.items() for p in store.document(vid,doc['id'])['pages'] if p.get('title')])
+            if path=='/api/ai/status' and not mutation:return self.send(self.server.ai_runtime.status(store.state()['settings']))
+            if path=='/api/ai/start' and mutation:
+                self.read(4096)
+                return self.send(self.server.ai_runtime.start(store.state()['settings']))
             if path=='/api/client-error' and mutation:
                 report=json.loads(self.read(4096) or b'{}')
                 filename=report.get('file','')
@@ -257,6 +269,8 @@ class Handler(BaseHTTPRequestHandler):
                 'If asked for assessment, provide formative feedback with reasons and a relevant source, not an official grade.')
         if task!='chat':
             system='You are a learning tutor. Write the question or feedback in '+language+'. '+practice_instruction(task)
+        if body.get('expert') is True and did:
+            system+=' Act as the subject-specific tutor for the selected source section. Focus on its topic, explain your evidence, and explicitly state when a question falls outside this topic. A role label is not proof of expertise or correctness.'
         sources='\n\n'.join('['+str(i)+'] '+c['name']+' / '+str(c['page'])+'\n'+c['text'] for i,c in enumerate(context,1))
         history=[m for m in reversed(store.rows(vid,'messages')) if m['document_id']==did and m['page']==page and m['role'] in ('user','assistant')][-8:]
         # Practice questions and their feedback use the same selected source.
@@ -267,7 +281,10 @@ class Handler(BaseHTTPRequestHandler):
         messages.append({'role':'user','content':prompt})
         self.save_message(vid,did,page,'user',prompt)
         for attempt in range(2 if task!='chat' else 1):
-            request_body={'model':settings['model'],'messages':messages,'stream':False,'think':False,'options':{'num_predict':1500}}
+            # GPT-OSS accepts reasoning levels rather than a disabled-thinking
+            # contract; reserve room for its answer after the reasoning budget.
+            reasoning_model=settings['model'].split('/')[-1].startswith('gpt-oss')
+            request_body={'model':settings['model'],'messages':messages,'stream':False,'think':'low' if reasoning_model else False,'options':{'num_predict':4096 if reasoning_model else 1500}}
             if task!='chat':
                 request_body['format']=practice_schema(task)
                 request_body['options']['temperature']=0

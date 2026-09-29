@@ -37,6 +37,22 @@ class ModelTests(unittest.TestCase):
         rows=self.server.store.rows(self.server.store.config['active'],'messages')
         self.assertFalse(any(r['role']=='assistant' for r in rows))
 
+    def test_gpt_oss_uses_supported_reasoning_level(self):
+        self.server.store.settings({'model':'gpt-oss:20b'})
+        with self.request('/api/chat',{'text':'Explain'}) as response:self.assertTrue(json.load(response)['answer'])
+        self.assertEqual('low',Fixture.requests[-1]['think'])
+        self.assertGreater(Fixture.requests[-1]['options']['num_predict'],1500)
+
+    def test_expert_role_is_bound_to_valid_source(self):
+        store=self.server.store;vid=store.config['active']
+        did=store.add_document(vid,'source.docx',core.docx_bytes(),'Module')['id']
+        with self.request('/api/chat',{'text':'Explain','expert':True,'document_id':did,'page':2}) as response:
+            self.assertEqual(2,json.load(response)['sources'][0]['page'])
+        self.assertIn('subject-specific tutor',Fixture.requests[-1]['messages'][0]['content'])
+        with self.request('/api/topics') as response:
+            topics=json.load(response)
+        self.assertTrue(any(p['document_id']==did and p['page']==2 for p in topics))
+
     def test_answer_sources_survive_restart_and_backup(self):
         from ala.storage import Store
         store=self.server.store
