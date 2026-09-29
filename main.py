@@ -57,7 +57,9 @@ def main():
         else:
             raise RuntimeError('ALA is already running but unavailable. Existing data was not opened by a second process.')
     url='http://127.0.0.1:'+str(server.server_port)+'/#'+server.token
-    runtime={'url':url,'port':server.server_port,'pid':os.getpid()}
+    from ala import __version__
+    from ala.build import build_id
+    runtime={'url':url,'port':server.server_port,'pid':os.getpid(),'version':__version__,'build':build_id(root)}
     atomic_json(instance_file,runtime)
     if opt.runtime_file: atomic_json(opt.runtime_file,runtime)
     if not opt.no_browser: launch_browser(url)
