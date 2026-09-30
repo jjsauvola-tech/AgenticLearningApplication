@@ -10,11 +10,12 @@ function setup(){
   document:{querySelector:s=>elements.get(s)||null,addEventListener:(n,fn)=>{listeners[n]=fn},createElement:()=>({append(){},replaceChildren(){},setAttribute(){}}),body:{prepend(){},classList:{toggle(){}}}},
   fetch:async()=>({ok:true,json:async()=>({})})};
  vm.createContext(ctx);
- for(const file of ['app.js','goals.js','imports.js','chat.js','recovery.js','agents.js','ai.js','notes.js'])vm.runInContext(fs.readFileSync('web/'+file,'utf8'),ctx,{filename:file});
+ for(const file of ['app.js','goals.js','imports.js','chat.js','recovery.js','agents.js','ai.js','notes.js','inquiry.js'])vm.runInContext(fs.readFileSync('web/'+file,'utf8'),ctx,{filename:file});
  return {ctx,elements,listeners,run:code=>vm.runInContext(code,ctx)};
 }
 test('all production scripts load in order without early dependency errors',()=>{
- const {listeners}=setup();assert.equal(typeof listeners.DOMContentLoaded,'function');
+ const {listeners,ctx}=setup();assert.equal(typeof listeners.DOMContentLoaded,'function');
+ assert.equal(typeof ctx.mountInquiry,'function');
 });
 test('boot replaces a stale tab token before loading or writing',async()=>{
  const {ctx,run}=setup();let loadedToken;

@@ -18,6 +18,7 @@ from .importers import MAX_FILE, ImportProblem
 from .lifecycle import InstanceLock
 from .workers import extract_isolated, run_worker
 from .diagnostics import create_logger, safe_trace
+from .inquiry import InquiryConflict
 
 class AppServer(ThreadingHTTPServer):
     daemon_threads = False
@@ -164,6 +165,10 @@ class Handler(BaseHTTPRequestHandler):
                 store.switch(body['id'])
                 return self.send(store.state())
             if path=='/api/documents': return self.send(store.documents(vid))
+            if path=='/api/inquiry' and not mutation:return self.send(store.inquiries(vid))
+            if path=='/api/inquiry/start' and mutation:return self.send(store.start_inquiry(vid,body))
+            if path=='/api/tutor/turn' and mutation:return self.send(store.inquiry_turn(vid,body))
+            if path.startswith('/api/inquiry/') and not mutation:return self.send(store.inquiry(vid,path.rsplit('/',1)[1]))
             if path.startswith('/api/document/'):
                 return self.send(store.document(vid,path.rsplit('/',1)[1]))
             if path=='/api/search': return self.send(store.search(vid,q.get('q',[''])[0]))
@@ -217,6 +222,8 @@ class Handler(BaseHTTPRequestHandler):
                     image=run_worker(doc['format'],original,int(page))
                 return self.send(image,mime='image/png')
             return self.send({'error':'not_found'},404)
+        except InquiryConflict as e:
+            return self.send({'error':str(e)},409)
         except (ValueError,KeyError,ImportProblem) as e:
             return self.send({'error':str(e).strip("'")[:180]},400)
         except Exception as e:

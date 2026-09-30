@@ -91,7 +91,7 @@ class GoalTests(unittest.TestCase):
         self.assertEqual('Keep me', restarted.rows(restored, 'notes')[0]['body'])
         restarted.save_goal(restored, {'title':'Works after migration'})
         with restarted.db(restored) as db:
-            self.assertEqual(2, db.execute('PRAGMA user_version').fetchone()[0])
+            self.assertEqual(3, db.execute('PRAGMA user_version').fetchone()[0])
 
     def test_validation(self):
         for values in ({'title':''}, {'title':'x','prerequisites':'bad'},

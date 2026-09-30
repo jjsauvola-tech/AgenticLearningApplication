@@ -25,3 +25,5 @@
 .slide-preview{display:block;width:100%;height:auto;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:white}.slide-controls{margin-bottom:16px}.reader-shell{min-width:0}
 
 .recovery-status{display:flex;align-items:center;gap:12px;margin:12px;flex-wrap:wrap}.recovery-status[hidden]{display:none}
+
+.inquiry-open{margin:0 0 18px}.inquiry-steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.inquiry-steps span{padding:6px 9px;background:var(--soft);border-radius:8px;font-size:.78rem}.inquiry-steps .current{background:var(--accent-soft);outline:2px solid var(--accent);font-weight:700}.inquiry-answer{white-space:pre-wrap;overflow-wrap:anywhere}.inquiry-open{white-space:normal}

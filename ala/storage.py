@@ -12,6 +12,7 @@ from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
 from .importers import extract
+from .inquiry import InquiryStore, SCHEMA as INQUIRY_SCHEMA
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -53,14 +54,21 @@ CREATE TABLE IF NOT EXISTS message_sources(
 def migrate_goals(path):
     with closing(sqlite3.connect(path)) as db:
         version = db.execute('PRAGMA user_version').fetchone()[0]
-        if version not in (1, 2):
+        if version not in (1, 2, 3):
             raise ValueError('unsupported_database')
+        if version < 3:
+            backup=Path(str(path)+'.before-v3.bak')
+            if not backup.exists():
+                with closing(sqlite3.connect(backup)) as snapshot:
+                    db.backup(snapshot)
         if version == 1:
             db.executescript('BEGIN IMMEDIATE;\n' + GOAL_SCHEMA + '\nCOMMIT;')
         # Additive metadata: older schema-2 backups simply have no source links.
         db.executescript(MESSAGE_SOURCE_SCHEMA)
+        if version < 3:
+            db.executescript('BEGIN IMMEDIATE;\n'+INQUIRY_SCHEMA+'\nCOMMIT;')
 
-class Store:
+class Store(InquiryStore):
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -106,7 +114,7 @@ class Store:
             path = self.root/'vaults'/vid
             (path/'originals').mkdir(parents=True)
             con = sqlite3.connect(path/'learning.sqlite')
-            con.executescript(SCHEMA + GOAL_SCHEMA + MESSAGE_SOURCE_SCHEMA)
+            con.executescript(SCHEMA + GOAL_SCHEMA + MESSAGE_SOURCE_SCHEMA + INQUIRY_SCHEMA)
             con.close()
             previous = json.loads(json.dumps(self.config))
             self.config['vaults'].append({'id':vid,'name':name,'created':now()})
@@ -320,7 +328,7 @@ class Store:
                 dst.close()
             out = Path(tmp)/'backup.zip'
             with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
-                z.writestr('manifest.json',json.dumps({'schema':2,'created':now(),'name':next(v['name'] for v in self.config['vaults'] if v['id']==vid)}))
+                z.writestr('manifest.json',json.dumps({'schema':3,'created':now(),'name':next(v['name'] for v in self.config['vaults'] if v['id']==vid)}))
                 z.write(dbfile,'learning.sqlite')
                 for p in (path/'originals').glob('*'):
                     if p.is_file() and p.suffix != '.tmp': z.write(p,'originals/'+p.name)
@@ -335,7 +343,7 @@ class Store:
             names={i.filename for i in infos}
             if not {'manifest.json','learning.sqlite'} <= names: raise ValueError('invalid_backup')
             manifest=json.loads(z.read('manifest.json'))
-            if manifest.get('schema') not in (1,2): raise ValueError('invalid_backup')
+            if manifest.get('schema') not in (1,2,3): raise ValueError('invalid_backup')
             for item in infos:
                 if item.filename in ('manifest.json','learning.sqlite'): continue
                 if not re.fullmatch(r'originals/[a-f0-9]{64}\.(pdf|docx|pptx)',item.filename): raise ValueError('invalid_backup')
@@ -348,7 +356,8 @@ class Store:
                     required={'documents','notes','progress','messages','cards','attempts'}
                     tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                     version=con.execute('PRAGMA user_version').fetchone()[0]
-                    if version==2: required |= {'goals','goal_dependencies'}
+                    if version>=2: required |= {'goals','goal_dependencies'}
+                    if version==3: required |= {'inquiry_attempts','inquiry_requests'}
                     if not required <= tables or version!=manifest['schema']: raise ValueError('invalid_backup')
                     if con.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0]: raise ValueError('invalid_backup')
                     for sha,fmt,pages in con.execute('SELECT sha256,format,pages FROM documents'):

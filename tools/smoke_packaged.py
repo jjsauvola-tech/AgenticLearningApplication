@@ -38,6 +38,11 @@ def main():
                 result=json.loads(request('/api/import',content,{**head,'X-Filename':'biology.'+ext,'X-Course':'Biology'},True));ids[ext]=result['id']
             request('/api/notes',{'document_id':ids['docx'],'page':1,'title':'Observation','body':'Persistent note'},head)
             request('/api/settings',{'language':'en','theme':'dark','fontSize':20,'showAssistant':False})
+            inquiry=json.loads(request('/api/inquiry/start',{'request_id':'smoke-start','document_id':ids['docx'],'page':2},head))
+            turn={'request_id':'smoke-answer','attempt_id':inquiry['id'],'expected_revision':0,'action':'answer','text':'How does changing light affect energy conversion?'}
+            first=json.loads(request('/api/tutor/turn',turn,head))
+            repeated=json.loads(request('/api/tutor/turn',turn,head))
+            assert first==repeated and first['revision']==1
             png=request('/api/preview/'+ids['pdf']+'/1',headers=head)
             assert png.startswith(b'\x89PNG'), 'PDF rendering failed'
             backup=request('/api/backup',headers=head)
@@ -54,8 +59,10 @@ def main():
             assert state['settings']['language']=='en' and state['settings']['fontSize']==20
             assert len(json.loads(request('/api/documents',headers=head)))==3
             assert json.loads(request('/api/notes',headers=head))[0]['body']=='Persistent note'
+            resumed=json.loads(request('/api/inquiry/'+inquiry['id'],headers=head))
+            assert resumed['state']['original']==turn['text'] and resumed['state']['phase']=='clarify'
             request('/api/shutdown',{});process.wait(timeout=10)
-            print('PASS: executable start, three imports, PDF image, settings, notes, backup, restart persistence, Unicode path')
+            print('PASS: executable, imports, PDF, notes, inquiry retry/restart, backup, Unicode path')
         finally:
             if process.poll() is None:process.terminate();process.wait(timeout=10)
 
