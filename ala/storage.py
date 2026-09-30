@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from .importers import extract
+from .learning import LearningFeatures, SCHEMA as LEARNING_SCHEMA
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -30,10 +31,10 @@ CREATE TABLE IF NOT EXISTS progress(document_id TEXT,page INTEGER,status TEXT,PR
 CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,document_id TEXT,page INTEGER,role TEXT,body TEXT,created TEXT);
 CREATE TABLE IF NOT EXISTS cards(id TEXT PRIMARY KEY,document_id TEXT,page INTEGER,front TEXT,back TEXT,created TEXT);
 CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,document_id TEXT,page INTEGER,question TEXT,answer TEXT,feedback TEXT,created TEXT);
-PRAGMA user_version=1;
 '''
+SCHEMA += LEARNING_SCHEMA
 
-class Store:
+class Store(LearningFeatures):
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -46,6 +47,19 @@ class Store:
         self.config['settings'] = {**DEFAULTS, **self.config['settings']}
         if not self.config['vaults']:
             self.create_vault('Oma oppiminen')
+        # Add new tables without replacing any existing student records.
+        for vault in self.config['vaults']:
+            self.migrate(self.vault_path(vault['id'])/'learning.sqlite')
+
+    @staticmethod
+    def migrate(path):
+        con = sqlite3.connect(path)
+        try:
+            if con.execute('PRAGMA user_version').fetchone()[0] > 2:
+                raise ValueError('newer_database_version')
+            con.executescript(SCHEMA)
+        finally:
+            con.close()
 
     def save_config(self):
         tmp = self.config_path.with_suffix('.tmp')
@@ -234,7 +248,7 @@ class Store:
                     if con.execute('PRAGMA integrity_check').fetchone()[0]!='ok': raise ValueError('invalid_backup')
                     required={'documents','notes','progress','messages','cards','attempts'}
                     tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                    if not required <= tables or con.execute('PRAGMA user_version').fetchone()[0]!=1: raise ValueError('invalid_backup')
+                    if not required <= tables or con.execute('PRAGMA user_version').fetchone()[0] not in (1,2): raise ValueError('invalid_backup')
                     if con.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0]: raise ValueError('invalid_backup')
                     for sha,fmt,pages in con.execute('SELECT sha256,format,pages FROM documents'):
                         if not re.fullmatch(r'[a-f0-9]{64}',sha) or fmt not in ('pdf','docx','pptx'): raise ValueError('invalid_backup')
@@ -249,6 +263,7 @@ class Store:
                     prepared=stage/'ready'
                     prepared.mkdir()
                     shutil.copyfile(stage/'learning.sqlite',prepared/'learning.sqlite')
+                    self.migrate(prepared/'learning.sqlite')
                     if (stage/'originals').exists(): shutil.copytree(stage/'originals',prepared/'originals')
                     else: (prepared/'originals').mkdir()
                     os.replace(prepared,target)

@@ -2,7 +2,7 @@
 
 ALA is a local learning workspace for Windows. Any course can be imported from DOCX, PDF and PPTX files. The application repository and distribution contain no course content, student records, model weights or API credentials.
 
-Version 0.1.0 is the first working study prototype. It implements the material-import and local-storage foundation, configurable UI, notes, study cards, practice history and an optional local Ollama tutor. It is not the completed feature set of the full product specification.
+Version 0.2.0 adds editable learning goals and prerequisites, multiple-choice practice with immutable scored attempts, card editing, and previewed study-record export to the initial local study workspace. It is not the completed feature set of the full product specification. See `HANDOFF.md` for the verified state and remaining work when continuing on another computer.
 
 ## Running the Windows build
 
@@ -24,11 +24,15 @@ Exit from Settings → Exit application. The normal launcher also shuts down its
 - View original PDF pages locally. DOCX and PPTX use a clearly labelled structured text view.
 - Local search with source navigation, source-linked editable notes and study progress.
 - Create study cards, save practice answers and self-review, revisit the original source.
+- Edit goals, modules, source anchors and prerequisite dependencies; reject cycles and cross-course dependencies.
+- Review and accept goal suggestions derived from document headings. Progress remains self-assessment.
+- Author four-option questions with an answer key and explanation; take a scored practice and revisit sources. Editing questions preserves earlier attempt snapshots.
+- Edit existing cards and preview an export of selected study-record types as JSON.
 - Optional Ollama chat, source context and history; generate a practice question or request formative feedback.
 - Copy source context to another tool and explicitly paste an external, unverified response back.
 - ZIP backup/restore and original-file download. No cloud dependency for reading, notes or stored practice.
 
-The learning flow currently follows imported document sections. Marking a section as studied does not certify competence. The tutor cannot execute tools or change course acceptance rules.
+The learning flow combines document sections and editable goals. Marking a section or goal complete does not certify competence. The tutor cannot execute tools or change course acceptance rules.
 
 ## Local AI
 
@@ -39,9 +43,9 @@ The application remains useful without a model. The interface explicitly reports
 ## Current limitations and next milestones
 
 - Exact DOCX/PPTX layout, embedded image interpretation, animations and OCR are not implemented. Original files remain available, and import warnings identify these limitations.
-- The editable learning-goal dependency graph, semantic retrieval, generated mind maps, speech and web search remain planned.
+- Semantic retrieval, generated mind maps, speech and web search remain planned.
 - Cloud-provider integrations and encrypted credential storage remain planned. The current AI adapter is local Ollama only.
-- Practice supports written questions, answers and feedback. Automatically scored multiple-choice tests and formal university exam administration remain planned.
+- Written practice and manually authored multiple-choice practice are implemented. Automated question-bank generation and formal university exam administration remain planned.
 - Imported files with the same name and different content coexist as distinct records; a full version-linking UI remains planned.
 - The interface has keyboard focus indicators and a modal focus loop; comprehensive screen-reader and 200% zoom certification is not claimed.
 - The initial local package is Windows x64. An ARM64 build is a separate target and must pass native packaging and smoke tests before being described as supported.
@@ -76,3 +80,7 @@ python tools/smoke_packaged.py dist/ALA/ALA.exe
 Unit and HTTP tests create synthetic biology content, without depending on any particular real course. `tools/smoke_packaged.py` starts the actual EXE, imports all three formats, renders a PDF, writes notes, saves settings, exports a backup and restarts to check persistence. It uses a path containing spaces and a non-ASCII character.
 
 See `QA_REPORT.md` for the scope of the executed checks and `PRODUCT_REQUIREMENTS.md` for the product direction.
+
+## Desktop shortcut
+
+The Windows build contains an ALA icon and `install_shortcut.ps1`. From the extracted application folder, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\install_shortcut.ps1` to create `ALA.lnk` on the current user's desktop. The script can also take `-DataDirectory` to open an existing vault root. Keep the application folder in a stable location after creating the shortcut.

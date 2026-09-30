@@ -1,4 +1,10 @@
-# Verification record for ALA 0.1.0
+# Verification record for ALA
+
+## Version 0.2.0 handoff, 28 September 2026
+
+18 local unit/HTTP tests passed, including dependency-cycle rejection, cross-course validation, vault isolation, immutable quiz scoring, repeated submission, card editing, new-record backups and version-1 database migration. Both JavaScript syntax checks passed. The packaged Windows x64 EXE smoke test passed imports, PDF rendering, settings, notes, goals, quiz scoring, card editing, backup and restart persistence. Browser testing verified creation and display of a source-linked goal; remaining UI checks and desktop shortcut installation are explicitly listed in `HANDOFF.md`. Check the new GitHub Actions run for this version's x64/ARM64 result.
+
+## Version 0.1.0 baseline
 
 Prepared during the first Windows implementation, 27–28 September 2026.
 

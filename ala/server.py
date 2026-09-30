@@ -66,7 +66,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             url=urlparse(self.path)
             path=url.path
-            if not mutation and path in ('/','/app.js','/style.css'):
+            if not mutation and path in ('/','/app.js','/learning.js','/style.css'):
                 filename='index.html' if path=='/' else path[1:]
                 mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'}[Path(filename).suffix]
                 return self.send((self.server.web/filename).read_bytes(),mime=mime+'; charset=utf-8')
@@ -96,6 +96,16 @@ class Handler(BaseHTTPRequestHandler):
                 store.switch(body['id'])
                 return self.send(store.state())
             if path=='/api/documents': return self.send(store.documents(vid))
+            if path=='/api/goals':
+                return self.send({'id':store.save_goal(vid,body)} if mutation else store.goals(vid))
+            if path=='/api/quiz/questions':
+                return self.send({'id':store.save_question(vid,body)} if mutation else store.quiz_questions(vid))
+            if path=='/api/quiz/start' and mutation:
+                return self.send(store.start_quiz(vid,body.get('course',''),body.get('count',5)))
+            if path=='/api/quiz/submit' and mutation:
+                return self.send(store.submit_quiz(vid,body['id'],body.get('answers')))
+            if path=='/api/quiz/history' and not mutation:
+                return self.send(store.quiz_history(vid))
             if path.startswith('/api/document/'):
                 return self.send(store.document(vid,path.rsplit('/',1)[1]))
             if path=='/api/search': return self.send(store.search(vid,q.get('q',[''])[0]))
@@ -109,11 +119,7 @@ class Handler(BaseHTTPRequestHandler):
                     db.execute('INSERT OR REPLACE INTO progress VALUES(?,?,?)',(body['document_id'],body['page'],body['status']))
                 return self.send({'ok':True})
             if path=='/api/cards' and mutation:
-                store.anchor(vid,body.get('document_id'),body.get('page'))
-                cid=uuid.uuid4().hex
-                with store.db(vid) as db:
-                    db.execute('INSERT INTO cards VALUES(?,?,?,?,?,?)',(cid,body.get('document_id'),body.get('page'),str(body['front'])[:4000],str(body['back'])[:12000],now()))
-                return self.send({'id':cid})
+                return self.send({'id':store.save_card(vid,body)})
             if path=='/api/attempts' and mutation:
                 store.anchor(vid,body.get('document_id'),body.get('page'))
                 aid=uuid.uuid4().hex
@@ -189,6 +195,10 @@ class Handler(BaseHTTPRequestHandler):
                 'If asked for a question, give one clear practice question without revealing the answer. '
                 'If asked for assessment, provide formative feedback with reasons and a relevant source, not an official grade.')
         sources='\n\n'.join('['+str(i)+'] '+c['name']+' / '+str(c['page'])+'\n'+c['text'] for i,c in enumerate(context,1))
+        if body.get('goal_id'):
+            goal=next((g for g in store.goals(vid) if g['id']==body['goal_id']),None)
+            if goal is None: raise ValueError('not_found')
+            system+='\nStudent-selected learning goal (data): '+json.dumps({'title':goal['title'],'description':goal['description']},ensure_ascii=False)
         history=[m for m in reversed(store.rows(vid,'messages')) if m['document_id']==did and m['page']==page and m['role'] in ('user','assistant')][-8:]
         messages=[{'role':'system','content':system+'\n\nSOURCE MATERIAL\n'+sources}]
         messages.extend({'role':m['role'],'content':m['body'][:6000]} for m in history)

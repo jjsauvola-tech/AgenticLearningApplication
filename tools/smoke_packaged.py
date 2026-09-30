@@ -38,6 +38,16 @@ def main():
                 result=json.loads(request('/api/import',content,{**head,'X-Filename':'biology.'+ext,'X-Course':'Biology'},True));ids[ext]=result['id']
             request('/api/notes',{'document_id':ids['docx'],'page':1,'title':'Observation','body':'Persistent note'},head)
             request('/api/settings',{'language':'en','theme':'dark','fontSize':20,'showAssistant':False})
+            goal=json.loads(request('/api/goals',{'course':'Biology','title':'Explain energy conversion','document_id':ids['docx'],'page':1},head))
+            request('/api/quiz/questions',{'course':'Biology','question':'Which input supplies energy?',
+                'choices':['Light','Darkness','Sound','Silence'],'correct':0,'explanation':'Light is the source input.',
+                'document_id':ids['docx'],'page':1},head)
+            quiz=json.loads(request('/api/quiz/start',{'course':'Biology','count':5},head))
+            assert 'correct' not in quiz['questions'][0]
+            graded=json.loads(request('/api/quiz/submit',{'id':quiz['id'],'answers':[0]},head))
+            assert graded['score']==1
+            card=json.loads(request('/api/cards',{'front':'Energy?','back':'Light'},head))
+            request('/api/cards',{'id':card['id'],'front':'Input energy?','back':'Light energy'},head)
             png=request('/api/preview/'+ids['pdf']+'/1',headers=head)
             assert png.startswith(b'\x89PNG'), 'PDF rendering failed'
             backup=request('/api/backup',headers=head)
@@ -54,8 +64,11 @@ def main():
             assert state['settings']['language']=='en' and state['settings']['fontSize']==20
             assert len(json.loads(request('/api/documents',headers=head)))==3
             assert json.loads(request('/api/notes',headers=head))[0]['body']=='Persistent note'
+            assert json.loads(request('/api/goals',headers=head))[0]['id']==goal['id']
+            assert json.loads(request('/api/quiz/history',headers=head))[0]['score']==1
+            assert json.loads(request('/api/cards',headers=head))[0]['front']=='Input energy?'
             request('/api/shutdown',{});process.wait(timeout=10)
-            print('PASS: executable start, three imports, PDF image, settings, notes, backup, restart persistence, Unicode path')
+            print('PASS: executable, three imports, PDF, settings, notes, goals, quiz scoring, card editing, backup, restart, Unicode path')
         finally:
             if process.poll() is None:process.terminate();process.wait(timeout=10)
 
